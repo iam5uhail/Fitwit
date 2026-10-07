@@ -15,6 +15,7 @@ export default function ProfileScreen({ setGoal }) {
   const [email, setEmail] = useState('');
   const [inputCode, setInputCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
   const [weight, setWeight] = useState('70');
   const [height, setHeight] = useState('175');
@@ -75,13 +76,17 @@ export default function ProfileScreen({ setGoal }) {
     loadUser();
   }, []);
 
-  const handleSendCode = async () => {
+  const handleSendCode = async (isResend = false) => {
     if (!email.includes('@')) {
       showToast('Please enter a valid email address.', 'error');
       return;
     }
 
-    setIsLoading(true);
+    if (isResend) {
+      setIsResending(true);
+    } else {
+      setIsLoading(true);
+    }
     try {
       const response = await fetch(`${API_URL}/send-code`, {
         method: 'POST',
@@ -92,7 +97,7 @@ export default function ProfileScreen({ setGoal }) {
       const data = await response.json();
       if (data.success) {
         setAuthStatus('verifying');
-        showToast('Email sent! Check your inbox.', 'success');
+        showToast(isResend ? 'Code resent! Check your inbox.' : 'Email sent! Check your inbox.', 'success');
       } else {
         showToast(data.error || 'Failed to send code', 'error');
       }
@@ -101,6 +106,7 @@ export default function ProfileScreen({ setGoal }) {
       showToast('Network Error. Could not connect to backend.', 'error');
     } finally {
       setIsLoading(false);
+      setIsResending(false);
     }
   };
 
@@ -174,7 +180,7 @@ export default function ProfileScreen({ setGoal }) {
                 value={email}
                 onChangeText={setEmail}
               />
-              <TouchableOpacity style={[styles.authBtn, isLoading && { opacity: 0.7 }]} onPress={handleSendCode} disabled={isLoading}>
+              <TouchableOpacity style={[styles.authBtn, isLoading && { opacity: 0.7 }]} onPress={() => handleSendCode(false)} disabled={isLoading}>
                 <Text style={styles.authBtnText}>{isLoading ? 'Sending...' : 'Send Code'}</Text>
               </TouchableOpacity>
             </>
@@ -189,16 +195,16 @@ export default function ProfileScreen({ setGoal }) {
                 onChangeText={setInputCode}
                 maxLength={4}
               />
-              <TouchableOpacity style={[styles.authBtn, isLoading && { opacity: 0.7 }]} onPress={handleVerify} disabled={isLoading}>
+              <TouchableOpacity style={[styles.authBtn, isLoading && { opacity: 0.7 }]} onPress={handleVerify} disabled={isLoading || isResending}>
                 <Text style={styles.authBtnText}>{isLoading ? 'Verifying...' : 'Verify & Login'}</Text>
               </TouchableOpacity>
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 24, paddingHorizontal: 10 }}>
-                <TouchableOpacity onPress={() => setAuthStatus('logged_out')} disabled={isLoading}>
+                <TouchableOpacity onPress={() => setAuthStatus('logged_out')} disabled={isLoading || isResending}>
                   <Text style={{ color: theme.muted, fontSize: 14 }}>Change email</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={handleSendCode} disabled={isLoading}>
-                  <Text style={{ color: theme.accent, fontSize: 14, fontWeight: 'bold' }}>Resend code</Text>
+                <TouchableOpacity onPress={() => handleSendCode(true)} disabled={isLoading || isResending}>
+                  <Text style={{ color: theme.accent, fontSize: 14, fontWeight: 'bold', opacity: isResending ? 0.7 : 1 }}>{isResending ? 'Sending...' : 'Resend code'}</Text>
                 </TouchableOpacity>
               </View>
             </>

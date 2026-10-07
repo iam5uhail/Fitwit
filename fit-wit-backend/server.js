@@ -72,7 +72,7 @@ app.post('/api/auth/send-code', async (req, res) => {
         res.json({ success: true, message: 'Code sent successfully' });
     } catch (error) {
         console.error('Email sending error:', error);
-        res.status(500).json({ error: 'Failed to send real email. Make sure you are only sending to your registered Resend email address!' });
+        res.status(500).json({ error: 'Failed to send email. Check backend logs for details.' });
     }
 });
 

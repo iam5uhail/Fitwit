@@ -85,7 +85,7 @@ export default function MainNavigator() {
             const end = new Date();
             const start = new Date();
             start.setHours(0, 0, 0, 0);
-            
+
             const pastSteps = await Pedometer.getStepCountAsync(start, end);
             if (pastSteps && pastSteps.steps > currentTotal) {
               currentTotal = pastSteps.steps;
@@ -99,8 +99,8 @@ export default function MainNavigator() {
 
         // 2. Use the Accelerometer for INSTANT live counting (solves the standalone app bug!)
         setStatusMsg('Live Counting Active');
-        Accelerometer.setUpdateInterval(30); 
-        
+        Accelerometer.setUpdateInterval(30);
+
         let lastStepTime = Date.now();
         base = currentTotal;
 
@@ -108,8 +108,8 @@ export default function MainNavigator() {
           const magnitude = Math.sqrt(x * x + y * y + z * z);
           const now = Date.now();
 
-          // Threshold 1.11 and 350ms for instant live updates
-          if (magnitude > 1.11 && now - lastStepTime > 350) {
+          // Threshold 1.18 and 400ms to reduce false steps (less sensitive)
+          if (magnitude > 1.11 && now - lastStepTime > 400) {
             lastStepTime = now;
             base += 1;
             setGlobalSteps(base);
@@ -146,14 +146,14 @@ export default function MainNavigator() {
     if (['MonthlyReport', 'Goals'].includes(tab) && !isLoggedIn) {
       return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
-           <IconProfile color={theme.accent} size={64} />
-           <Text style={{ color: theme.ink, fontSize: 28, fontWeight: 'bold', marginTop: 24, textAlign: 'center' }}>Login Required</Text>
-           <Text style={{ color: theme.muted, textAlign: 'center', marginTop: 12, marginBottom: 32, fontSize: 16, lineHeight: 24 }}>
-             You need to create an account to save your daily steps to the cloud and track your weekly and monthly goals over time!
-           </Text>
-           <TouchableOpacity style={{ backgroundColor: theme.accent, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 30 }} onPress={() => setActiveTab('Profile')}>
-             <Text style={{ color: theme.bg, fontWeight: 'bold', fontSize: 16 }}>Go to Login / Signup</Text>
-           </TouchableOpacity>
+          <IconProfile color={theme.accent} size={64} />
+          <Text style={{ color: theme.ink, fontSize: 28, fontWeight: 'bold', marginTop: 24, textAlign: 'center' }}>Login Required</Text>
+          <Text style={{ color: theme.muted, textAlign: 'center', marginTop: 12, marginBottom: 32, fontSize: 16, lineHeight: 24 }}>
+            You need to create an account to save your daily steps to the cloud and track your weekly and monthly goals over time!
+          </Text>
+          <TouchableOpacity style={{ backgroundColor: theme.accent, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 30 }} onPress={() => setActiveTab('Profile')}>
+            <Text style={{ color: theme.bg, fontWeight: 'bold', fontSize: 16 }}>Go to Login / Signup</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -175,7 +175,7 @@ export default function MainNavigator() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <ScrollView 
+        <ScrollView
           ref={scrollViewRef}
           horizontal
           pagingEnabled
