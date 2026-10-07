@@ -66,11 +66,10 @@ export default function MainNavigator() {
 
     const startPedometer = async () => {
       try {
+        let currentTotal = 0;
+
         const savedSteps = await AsyncStorage.getItem('@today_steps');
-        if (savedSteps) {
-          base = parseInt(savedSteps, 10);
-          setGlobalSteps(base);
-        }
+        if (savedSteps) currentTotal = parseInt(savedSteps, 10);
 
         const savedGoal = await AsyncStorage.getItem('@daily_goal');
         if (savedGoal) setDailyGoal(parseInt(savedGoal, 10));
@@ -78,57 +77,43 @@ export default function MainNavigator() {
         const savedMonthlyGoal = await AsyncStorage.getItem('@monthly_goal');
         if (savedMonthlyGoal) setMonthlyGoal(parseInt(savedMonthlyGoal, 10));
 
+        // 1. Try to get the highly accurate historical steps from the OS
         try {
           const { status } = await Pedometer.requestPermissionsAsync();
           if (status === 'granted' && await Pedometer.isAvailableAsync()) {
             setStatusMsg('Syncing background steps...');
-            
             const end = new Date();
             const start = new Date();
             start.setHours(0, 0, 0, 0);
             
-            try {
-              const pastSteps = await Pedometer.getStepCountAsync(start, end);
-              if (pastSteps) {
-                base = pastSteps.steps;
-                setGlobalSteps(base);
-                AsyncStorage.setItem('@today_steps', base.toString());
-              }
-            } catch (err) {
-              console.log("Could not fetch past steps:", err);
-            }
-
-            setStatusMsg('Background Sync Active');
-            sub = Pedometer.watchStepCount(result => {
-              const currentTotal = base + result.steps;
+            const pastSteps = await Pedometer.getStepCountAsync(start, end);
+            if (pastSteps && pastSteps.steps > currentTotal) {
+              currentTotal = pastSteps.steps;
               setGlobalSteps(currentTotal);
               AsyncStorage.setItem('@today_steps', currentTotal.toString());
-            });
-            return;
+            }
           }
-        } catch (e) { }
+        } catch (e) {
+          console.log("Could not fetch official steps", e);
+        }
 
-        // Fallback accelerometer with advanced Anti-Falsing logic
-        setStatusMsg('Counting automatically');
-        Accelerometer.setUpdateInterval(30); // Faster polling to ensure we don't miss the peak of a footstep
-        let currentTotal = base;
+        // 2. Use the Accelerometer for INSTANT live counting (solves the standalone app bug!)
+        setStatusMsg('Live Counting Active');
+        Accelerometer.setUpdateInterval(30); 
+        
         let lastStepTime = Date.now();
-        let stepBuffer = 0;
-        let lastPeakTime = 0;
-        let lastValleyTime = 0;
+        base = currentTotal;
 
         sub = Accelerometer.addListener(({ x, y, z }) => {
           const magnitude = Math.sqrt(x * x + y * y + z * z);
           const now = Date.now();
 
-          // PURE REAL-TIME: No buffers, no rhythm checks, exactly like the smooth night version!
-          // Kept threshold at 1.15 and debounce at 350ms so it doesn't miss fast walking, 
-          // while still providing some basic resistance against picking it up off the bed.
+          // Threshold 1.11 and 350ms for instant live updates
           if (magnitude > 1.11 && now - lastStepTime > 350) {
             lastStepTime = now;
-            currentTotal += 1;
-            setGlobalSteps(currentTotal);
-            AsyncStorage.setItem('@today_steps', currentTotal.toString());
+            base += 1;
+            setGlobalSteps(base);
+            AsyncStorage.setItem('@today_steps', base.toString());
           }
         });
       } catch (e) {
