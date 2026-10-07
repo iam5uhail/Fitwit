@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "FitWit",
+    "slug": "fit-wit",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.suhai.fitwit",
+      "permissions": [
+        "ACTIVITY_RECOGNITION"
+      ]
+    },
+    "plugins": [
+      "expo-status-bar"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "1d3c3ebd-11d5-4d93-98b2-199da11eda30"
+      }
+    },
+    "owner": "suhailk241"
+  }
+}
