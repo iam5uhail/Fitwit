@@ -107,6 +107,9 @@ export default function HomeScreen({ steps, goal, statusMsg, setTab }) {
       <View style={styles.card}>
         <View style={styles.thisWeekHeader}>
           <Text style={styles.thisWeekTitle}>Activity Breakdown</Text>
+          <TouchableOpacity onPress={() => setTab('Timeline')}>
+            <Text style={{ color: theme.accent, fontSize: 14, fontWeight: 'bold' }}>Day wise list {'>'}</Text>
+          </TouchableOpacity>
         </View>
         
         <View style={{marginBottom: 20}}>

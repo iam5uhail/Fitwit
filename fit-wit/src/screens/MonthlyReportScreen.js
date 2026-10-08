@@ -33,6 +33,7 @@ export default function MonthlyReportScreen({ setTab }) {
   const [currentIdx, setCurrentIdx] = useState(2); // Default to Oct
   const [isLoading, setIsLoading] = useState(true);
   const [monthData, setMonthData] = useState(null);
+  const [selectedDayData, setSelectedDayData] = useState(null);
 
   const month = MONTHS[currentIdx];
 
@@ -134,7 +135,7 @@ export default function MonthlyReportScreen({ setTab }) {
           </TouchableOpacity>
           <Text style={styles.monthName}>{month}</Text>
           <TouchableOpacity onPress={handleNext} style={styles.arrowBtn}>
-            <Text style={[styles.arrowTxt, currentIdx === MONTHS.length - 1 && {opacity: 0.2}]}>^{'>'}</Text>
+            <Text style={[styles.arrowTxt, currentIdx === MONTHS.length - 1 && {opacity: 0.2}]}>{'>'}</Text>
           </TouchableOpacity>
         </View>
 
@@ -160,6 +161,22 @@ export default function MonthlyReportScreen({ setTab }) {
 
         {/* Calendar */}
         <View style={styles.calendarCard}>
+          
+          {selectedDayData && (
+            <View style={{ backgroundColor: theme.surface2, borderRadius: 16, padding: 16, alignSelf: 'center', minWidth: '90%', alignItems: 'center', marginBottom: 20, borderWidth: 1, borderColor: theme.line }}>
+              <TouchableOpacity style={{ position: 'absolute', top: 0, right: 0, padding: 16 }} onPress={() => setSelectedDayData(null)}>
+                <Text style={{ color: theme.muted, fontSize: 20, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
+              <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>{month} {selectedDayData.day}</Text>
+              <Text style={{ color: theme.ink, fontSize: 24, fontWeight: 'bold' }}>{selectedDayData.steps.toLocaleString()} <Text style={{ fontSize: 14, color: theme.muted }}>Steps</Text></Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 12, borderTopWidth: 1, borderTopColor: theme.line, paddingTop: 12 }}>
+                <Text style={{ color: theme.ink, fontSize: 12 }}>{((selectedDayData.steps * 0.000473).toFixed(2))} Mile</Text>
+                <Text style={{ color: theme.ink, fontSize: 12 }}>|   {((selectedDayData.steps * 0.04).toFixed(1))} Kcal</Text>
+                <Text style={{ color: theme.ink, fontSize: 12 }}>|   {Math.floor((selectedDayData.steps * 0.55)/3600)}h {Math.floor(((selectedDayData.steps * 0.55)%3600)/60)}m</Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.calendarGrid}>
             {daysArray.map((day, idx) => {
               if (day === null) return <View key={`empty-${idx}`} style={styles.dayCell} />;
@@ -167,10 +184,13 @@ export default function MonthlyReportScreen({ setTab }) {
               const dayData = d.daysMap && d.daysMap[day] ? d.daysMap[day] : null;
               const isGoal = d.goalDays.includes(day);
               
+              const isSelected = selectedDayData && selectedDayData.day === day;
+
               let progress = 0;
               if (dayData && dayData.goal > 0) {
                  progress = Math.min(dayData.steps / dayData.goal, 1);
               }
+              if (isSelected) progress = 1; // Full ring for selected
 
               const size = 36;
               const strokeWidth = 3;
@@ -180,17 +200,20 @@ export default function MonthlyReportScreen({ setTab }) {
 
               return (
                 <View key={day} style={styles.dayCell}>
-                  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+                  <TouchableOpacity 
+                    style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}
+                    onPress={() => setSelectedDayData({ day, steps: dayData ? dayData.steps : 0 })}
+                  >
                     <Svg width={size} height={size} style={{ position: 'absolute' }}>
                       <Circle
-                        stroke={theme.surface2}
+                        stroke={isSelected ? '#1E90FF' : theme.surface2}
                         cx={size / 2}
                         cy={size / 2}
                         r={radius}
-                        strokeWidth={strokeWidth}
-                        fill="none"
+                        strokeWidth={isSelected ? 0 : strokeWidth}
+                        fill={isSelected ? '#1E90FF' : 'none'}
                       />
-                      {progress > 0 && (
+                      {!isSelected && progress > 0 && (
                         <Circle
                           stroke={theme.accent}
                           cx={size / 2}
@@ -207,8 +230,8 @@ export default function MonthlyReportScreen({ setTab }) {
                         />
                       )}
                     </Svg>
-                    <Text style={[styles.dayText, isGoal && styles.dayTextGoal]}>{day}</Text>
-                  </View>
+                    <Text style={[styles.dayText, isGoal && styles.dayTextGoal, isSelected && { color: '#FFF' }]}>{day}</Text>
+                  </TouchableOpacity>
                 </View>
               );
             })}

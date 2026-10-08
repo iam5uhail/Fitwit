@@ -8,12 +8,13 @@ import HomeScreen from './screens/HomeScreen';
 import GoalsScreen from './screens/GoalsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import MonthlyReportScreen from './screens/MonthlyReportScreen';
+import TimelineScreen from './screens/TimelineScreen';
 import { IconProfile } from './components/Icons';
 import { ThemeContext } from './theme/ThemeContext';
 import { API_URL } from './config';
 
 const { width } = Dimensions.get('window');
-const TABS = ['Home', 'MonthlyReport', 'Goals', 'Profile'];
+const TABS = ['Home', 'MonthlyReport', 'Timeline', 'Goals', 'Profile'];
 
 export default function MainNavigator() {
   const { theme } = useContext(ThemeContext);
@@ -39,7 +40,9 @@ export default function MainNavigator() {
       const email = await AsyncStorage.getItem('@user_email');
       if (!email || globalSteps === lastSyncedSteps || globalSteps === 0) return;
 
-      const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const d = new Date();
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; // YYYY-MM-DD in local time!
+
       try {
         const res = await fetch(`${API_URL}/steps/sync`, {
           method: 'POST',
@@ -68,8 +71,18 @@ export default function MainNavigator() {
       try {
         let currentTotal = 0;
 
-        const savedSteps = await AsyncStorage.getItem('@today_steps');
-        if (savedSteps) currentTotal = parseInt(savedSteps, 10);
+        const todayStr = new Date().toDateString();
+        const savedDate = await AsyncStorage.getItem('@today_date');
+
+        if (savedDate !== todayStr) {
+          // New day, reset steps!
+          await AsyncStorage.setItem('@today_date', todayStr);
+          await AsyncStorage.setItem('@today_steps', '0');
+          currentTotal = 0;
+        } else {
+          const savedSteps = await AsyncStorage.getItem('@today_steps');
+          if (savedSteps) currentTotal = parseInt(savedSteps, 10);
+        }
 
         const savedGoal = await AsyncStorage.getItem('@daily_goal');
         if (savedGoal) setDailyGoal(parseInt(savedGoal, 10));
@@ -108,8 +121,8 @@ export default function MainNavigator() {
           const magnitude = Math.sqrt(x * x + y * y + z * z);
           const now = Date.now();
 
-          // Threshold 1.18 and 400ms to reduce false steps (less sensitive)
-          if (magnitude > 1.11 && now - lastStepTime > 400) {
+          // Threshold 1.25 and 500ms to reduce false steps (less sensitive for bed)
+          if (magnitude > 1.25 && now - lastStepTime > 500) {
             lastStepTime = now;
             base += 1;
             setGlobalSteps(base);
@@ -160,6 +173,7 @@ export default function MainNavigator() {
 
     switch (tab) {
       case 'Home': return <HomeScreen steps={globalSteps} goal={dailyGoal} statusMsg={statusMsg} setTab={setActiveTab} />;
+      case 'Timeline': return <TimelineScreen setTab={setActiveTab} />;
       case 'MonthlyReport': return <MonthlyReportScreen steps={globalSteps} goal={dailyGoal} setTab={setActiveTab} />;
       case 'Goals': return <GoalsScreen goal={dailyGoal} setGoal={(g) => { setDailyGoal(g); AsyncStorage.setItem('@daily_goal', g.toString()); }} monthlyGoal={monthlyGoal} setMonthlyGoal={(g) => { setMonthlyGoal(g); AsyncStorage.setItem('@monthly_goal', g.toString()); }} />;
       case 'Profile': return <ProfileScreen setGoal={(g) => { setDailyGoal(g); AsyncStorage.setItem('@daily_goal', g.toString()); }} />;
