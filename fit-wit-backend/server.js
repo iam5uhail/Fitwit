@@ -10,7 +10,10 @@ app.use(express.json());
 
 // CONNECT TO MONGODB (Using Legacy URI to bypass SRV block!)
 const MONGO_URI = process.env.MONGO_URI;
-mongoose.connect(MONGO_URI)
+mongoose.connect(MONGO_URI, {
+    serverSelectionTimeoutMS: 5000, // Fail fast if connection drops
+    family: 4 // Force IPv4 (Fixes hanging connection issue on Render with Node 18+)
+})
   .then(() => console.log('✅ Connected to MongoDB!'))
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
