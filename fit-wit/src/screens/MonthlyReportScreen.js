@@ -26,13 +26,13 @@ const getLastThreeMonths = () => {
 
 const { MONTHS, MONTH_DATES } = getLastThreeMonths();
 
-export default function MonthlyReportScreen({ setTab }) {
+export default function MonthlyReportScreen({ steps: currentLiveSteps, goal, setTab }) {
   const { theme } = useContext(ThemeContext);
   const styles = getStyles(theme);
   
   const [currentIdx, setCurrentIdx] = useState(2); // Default to Oct
   const [isLoading, setIsLoading] = useState(true);
-  const [monthData, setMonthData] = useState(null);
+  const [dbDataMap, setDbDataMap] = useState({});
   const [selectedDayData, setSelectedDayData] = useState(null);
 
   const month = MONTHS[currentIdx];
@@ -51,49 +51,7 @@ export default function MonthlyReportScreen({ setTab }) {
         const json = await res.json();
         
         if (json.success && json.data) {
-           let total = 0;
-           let mostActive = { steps: 0, date: '' };
-           let leastActive = { steps: 999999, date: '' };
-           let goalDaysArr = [];
-           let daysMap = {};
-
-           json.data.forEach(d => {
-             total += d.steps;
-             const dayNum = parseInt(d.date.split('-')[2], 10);
-             daysMap[dayNum] = { steps: d.steps, goal: d.goal };
-
-             if (d.steps > mostActive.steps) {
-               mostActive.steps = d.steps;
-               mostActive.date = d.date;
-             }
-             if (d.steps < leastActive.steps && d.steps > 0) {
-               leastActive.steps = d.steps;
-               leastActive.date = d.date;
-             }
-             if (d.steps >= d.goal) goalDaysArr.push(parseInt(d.date.split('-')[2], 10));
-           });
-
-           const daysInMonth = new Date(2024, currentIdx + 8, 0).getDate();
-           const avg = daysInMonth > 0 ? Math.floor(total / daysInMonth) : 0;
-
-           setMonthData({
-              totalSteps: total.toLocaleString(),
-              distance: (total * 0.000762).toFixed(2),
-              kcal: (total * 0.04).toFixed(1),
-              time: `${Math.floor((total * 0.55) / 3600)}h`,
-              dailyAvg: avg.toLocaleString(),
-              vsLastMonth: currentIdx === 2 ? '-179' : '+90', // Hardcoded trend for simplicity right now
-              growthPct: currentIdx === 2 ? '-7%' : '+4%',
-              isGrowthPositive: currentIdx !== 2,
-              mostActiveSteps: mostActive.steps.toLocaleString(),
-              mostActiveDay: mostActive.date ? `${month} ${parseInt(mostActive.date.split('-')[2], 10)}` : '-',
-              mostLeisurelySteps: leastActive.steps === 999999 ? '0' : leastActive.steps.toLocaleString(),
-              mostLeisurelyDay: leastActive.date ? `${month} ${parseInt(leastActive.date.split('-')[2], 10)}` : '-',
-              calendarDays: daysInMonth,
-              startDayOfWeek: new Date(2024, currentIdx + 7, 1).getDay(),
-              goalDays: goalDaysArr,
-              daysMap: daysMap
-           });
+           setDbDataMap(prev => ({...prev, [MONTH_DATES[currentIdx]]: json.data}));
         }
       } catch (err) {
         console.error(err);
@@ -103,6 +61,74 @@ export default function MonthlyReportScreen({ setTab }) {
     };
     fetchMonthData();
   }, [currentIdx]);
+
+  // Real-time calculation on render
+  let monthData = null;
+  const rawData = dbDataMap[MONTH_DATES[currentIdx]];
+  
+  if (rawData) {
+     let total = 0;
+     let mostActive = { steps: 0, date: '' };
+     let leastActive = { steps: 999999, date: '' };
+     let goalDaysArr = [];
+     let daysMap = {};
+
+     const dToday = new Date();
+     const todayStr = `${dToday.getFullYear()}-${String(dToday.getMonth()+1).padStart(2,'0')}-${String(dToday.getDate()).padStart(2,'0')}`;
+
+     rawData.forEach(d => {
+       const isToday = d.date === todayStr;
+       const actualSteps = isToday && currentLiveSteps > d.steps ? currentLiveSteps : d.steps;
+       
+       total += actualSteps;
+       const dayNum = parseInt(d.date.split('-')[2], 10);
+       daysMap[dayNum] = { steps: actualSteps, goal: d.goal };
+
+       if (actualSteps > mostActive.steps) {
+         mostActive.steps = actualSteps;
+         mostActive.date = d.date;
+       }
+       if (actualSteps < leastActive.steps && actualSteps > 0) {
+         leastActive.steps = actualSteps;
+         leastActive.date = d.date;
+       }
+       if (actualSteps >= d.goal) goalDaysArr.push(dayNum);
+     });
+     
+     // If today isn't in the DB yet but we have live steps, add it!
+     if (currentLiveSteps > 0 && MONTH_DATES[currentIdx] === todayStr.substring(0, 7) && !daysMap[dToday.getDate()]) {
+         const dayNum = dToday.getDate();
+         daysMap[dayNum] = { steps: currentLiveSteps, goal };
+         total += currentLiveSteps;
+         if (currentLiveSteps > mostActive.steps) {
+             mostActive.steps = currentLiveSteps;
+             mostActive.date = todayStr;
+         }
+         if (currentLiveSteps >= goal) goalDaysArr.push(dayNum);
+     }
+
+     const daysInMonth = new Date(dToday.getFullYear(), currentIdx + 8, 0).getDate();
+     const avg = daysInMonth > 0 ? Math.floor(total / daysInMonth) : 0;
+
+     monthData = {
+        totalSteps: total.toLocaleString(),
+        distance: (total * 0.000762).toFixed(2),
+        kcal: (total * 0.04).toFixed(1),
+        time: `${Math.floor((total * 0.55) / 3600)}h`,
+        dailyAvg: avg.toLocaleString(),
+        vsLastMonth: currentIdx === 2 ? '-179' : '+90',
+        growthPct: currentIdx === 2 ? '-7%' : '+4%',
+        isGrowthPositive: currentIdx !== 2,
+        mostActiveSteps: mostActive.steps.toLocaleString(),
+        mostActiveDay: mostActive.date ? `${month} ${parseInt(mostActive.date.split('-')[2], 10)}` : '-',
+        mostLeisurelySteps: leastActive.steps === 999999 ? '0' : leastActive.steps.toLocaleString(),
+        mostLeisurelyDay: leastActive.date ? `${month} ${parseInt(leastActive.date.split('-')[2], 10)}` : '-',
+        calendarDays: daysInMonth,
+        startDayOfWeek: new Date(dToday.getFullYear(), currentIdx + 8 - 1, 1).getDay(),
+        goalDays: goalDaysArr,
+        daysMap: daysMap
+     };
+  }
 
   // Generate calendar grid
   const daysArray = [];

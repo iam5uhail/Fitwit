@@ -1,12 +1,45 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import CircularProgress from '../components/CircularProgress';
 import { ThemeContext, PALETTES } from '../theme/ThemeContext';
 import { IconFlame, IconClock, IconRoute, IconSun, IconCheck } from '../components/Icons'; 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config';
 
 export default function HomeScreen({ steps, goal, statusMsg, setTab }) {
   const { theme, setTheme } = useContext(ThemeContext);
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const [recentDays, setRecentDays] = useState([]);
+
+  useEffect(() => {
+    const fetchRecent = async () => {
+      try {
+        const email = await AsyncStorage.getItem('@user_email');
+        if (!email) return;
+        const d = new Date();
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        const res = await fetch(`${API_URL}/steps/monthly?email=${email}&month=${dateStr}`);
+        const json = await res.json();
+        if (json.success && json.data) {
+          const formatted = json.data.reverse().map(item => {
+            const dt = new Date(item.date);
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return {
+              id: item.date,
+              dateDisplay: `${months[dt.getMonth()]} ${dt.getDate()} (${days[dt.getDay()]})`,
+              steps: item.steps,
+              kcal: (item.steps * 0.04).toFixed(1),
+              miles: (item.steps * 0.000473).toFixed(2),
+              hours: (item.steps * 0.55 / 3600).toFixed(2).replace('.', ':')
+            };
+          });
+          setRecentDays(formatted.slice(0, 3)); // Get last 3 days
+        }
+      } catch(e) {}
+    };
+    fetchRecent();
+  }, []);
 
   const distanceKm = (steps * 0.000762).toFixed(2);
   const kcal = (steps * 0.04).toFixed(0);
@@ -106,40 +139,42 @@ export default function HomeScreen({ steps, goal, statusMsg, setTab }) {
 
       <View style={styles.card}>
         <View style={styles.thisWeekHeader}>
-          <Text style={styles.thisWeekTitle}>Activity Breakdown</Text>
+          <Text style={styles.thisWeekTitle}>Recent Activity</Text>
           <TouchableOpacity onPress={() => setTab('Timeline')}>
             <Text style={{ color: theme.accent, fontSize: 14, fontWeight: 'bold' }}>Day wise list {'>'}</Text>
           </TouchableOpacity>
         </View>
         
-        <View style={{marginBottom: 20}}>
-          <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8}}>
-            <Text style={{color: theme.ink, fontSize: 14, fontWeight: 'bold'}}>Vigorous</Text>
-            <Text style={{color: theme.muted, fontSize: 14}}>{formatTime(vigorous)}</Text>
-          </View>
-          <View style={{height: 10, backgroundColor: theme.surface2, borderRadius: 5}}>
-            <View style={{height: 10, backgroundColor: '#ff4757', borderRadius: 5, width: `${vigPct}%`}} />
-          </View>
-        </View>
+        <View style={styles.listContainer}>
+          {recentDays.length === 0 ? <Text style={{color: theme.muted}}>Loading...</Text> : null}
+          {recentDays.map((item, index) => {
+            // If it's today, we inject the live steps exactly like TimelineScreen does!
+            const dToday = new Date();
+            const todayStr = `${dToday.getFullYear()}-${String(dToday.getMonth()+1).padStart(2,'0')}-${String(dToday.getDate()).padStart(2,'0')}`;
+            const isToday = item.id === todayStr;
+            const actualSteps = isToday && steps > item.steps ? steps : item.steps;
 
-        <View style={{marginBottom: 20}}>
-          <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8}}>
-            <Text style={{color: theme.ink, fontSize: 14, fontWeight: 'bold'}}>Moderate</Text>
-            <Text style={{color: theme.muted, fontSize: 14}}>{formatTime(moderate)}</Text>
-          </View>
-          <View style={{height: 10, backgroundColor: theme.surface2, borderRadius: 5}}>
-            <View style={{height: 10, backgroundColor: '#ffa502', borderRadius: 5, width: `${modPct}%`}} />
-          </View>
-        </View>
-        
-        <View style={{marginBottom: 8}}>
-          <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8}}>
-            <Text style={{color: theme.ink, fontSize: 14, fontWeight: 'bold'}}>Light</Text>
-            <Text style={{color: theme.muted, fontSize: 14}}>{formatTime(light)}</Text>
-          </View>
-          <View style={{height: 10, backgroundColor: theme.surface2, borderRadius: 5}}>
-            <View style={{height: 10, backgroundColor: '#2ed573', borderRadius: 5, width: `${lightPct}%`}} />
-          </View>
+            return (
+              <View key={item.id} style={styles.row}>
+                <View style={styles.colLeft}>
+                  <Text style={styles.rowSteps}>{actualSteps.toLocaleString()}</Text>
+                  <Text style={styles.rowDate}>{isToday ? 'Today' : item.dateDisplay}</Text>
+                </View>
+                <View style={styles.colCenter}>
+                  <Text style={styles.rowVal}>{(actualSteps * 0.04).toFixed(1)}</Text>
+                  <Text style={styles.rowLab}>Kcal</Text>
+                </View>
+                <View style={styles.colCenter}>
+                  <Text style={styles.rowVal}>{(actualSteps * 0.000473).toFixed(2)}</Text>
+                  <Text style={styles.rowLab}>Miles</Text>
+                </View>
+                <View style={styles.colRight}>
+                  <Text style={styles.rowVal}>{(actualSteps * 0.55 / 3600).toFixed(2).replace('.', ':')}</Text>
+                  <Text style={styles.rowLab}>Hours</Text>
+                </View>
+              </View>
+            );
+          })}
         </View>
       </View>
     </ScrollView>
@@ -176,9 +211,13 @@ const getStyles = (theme) => StyleSheet.create({
   thisWeekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   thisWeekTitle: { color: theme.ink, fontSize: 20, fontWeight: 'bold' },
   thisWeekLink: { fontSize: 14, color: theme.accent },
-  miniChart: { flexDirection: 'row', justifyContent: 'space-between', height: 110, alignItems: 'flex-end', paddingHorizontal: 4, marginTop: 5 },
-  miniBarCol: { alignItems: 'center', width: 32 },
-  miniBarText: { color: theme.muted, fontSize: 10, fontWeight: 'bold', marginBottom: 6 },
-  miniBar: { width: 14, backgroundColor: theme.surface2, borderRadius: 10, marginBottom: 8 },
-  miniDay: { color: theme.muted, fontSize: 12 }
+  listContainer: { marginTop: 0 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.surface2, padding: 16, borderRadius: 16, marginBottom: 8 },
+  colLeft: { flex: 2 },
+  colCenter: { flex: 1, alignItems: 'flex-end' },
+  colRight: { flex: 1, alignItems: 'flex-end' },
+  rowSteps: { color: theme.ink, fontSize: 16, fontWeight: 'bold' },
+  rowDate: { color: theme.muted, fontSize: 12, marginTop: 4 },
+  rowVal: { color: theme.ink, fontSize: 13, fontWeight: 'bold' },
+  rowLab: { color: theme.muted, fontSize: 11, marginTop: 4 }
 });

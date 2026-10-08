@@ -90,6 +90,9 @@ export default function MainNavigator() {
         const savedMonthlyGoal = await AsyncStorage.getItem('@monthly_goal');
         if (savedMonthlyGoal) setMonthlyGoal(parseInt(savedMonthlyGoal, 10));
 
+        // Fix: Set the initial global steps so it doesn't show 0 before the first step!
+        setGlobalSteps(currentTotal);
+
         // 1. Try to get the highly accurate historical steps from the OS
         try {
           const { status } = await Pedometer.requestPermissionsAsync();
@@ -173,7 +176,7 @@ export default function MainNavigator() {
 
     switch (tab) {
       case 'Home': return <HomeScreen steps={globalSteps} goal={dailyGoal} statusMsg={statusMsg} setTab={setActiveTab} />;
-      case 'Timeline': return <TimelineScreen setTab={setActiveTab} />;
+      case 'Timeline': return <TimelineScreen steps={globalSteps} setTab={setActiveTab} />;
       case 'MonthlyReport': return <MonthlyReportScreen steps={globalSteps} goal={dailyGoal} setTab={setActiveTab} />;
       case 'Goals': return <GoalsScreen goal={dailyGoal} setGoal={(g) => { setDailyGoal(g); AsyncStorage.setItem('@daily_goal', g.toString()); }} monthlyGoal={monthlyGoal} setMonthlyGoal={(g) => { setMonthlyGoal(g); AsyncStorage.setItem('@monthly_goal', g.toString()); }} />;
       case 'Profile': return <ProfileScreen setGoal={(g) => { setDailyGoal(g); AsyncStorage.setItem('@daily_goal', g.toString()); }} />;

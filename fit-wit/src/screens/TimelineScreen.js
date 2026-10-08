@@ -4,13 +4,12 @@ import { ThemeContext } from '../theme/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 
-export default function TimelineScreen({ setTab }) {
+export default function TimelineScreen({ steps: currentLiveSteps, setTab }) {
   const { theme } = useContext(ThemeContext);
   const styles = getStyles(theme);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [timelineData, setTimelineData] = useState([]);
-  const [totalSteps, setTotalSteps] = useState(0);
+  const [dbData, setDbData] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -23,27 +22,9 @@ export default function TimelineScreen({ setTab }) {
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; // YYYY-MM in local time!
         const res = await fetch(`${API_URL}/steps/monthly?email=${email}&month=${dateStr}`);
         const json = await res.json();
-
+        
         if (json.success && json.data) {
-          let sum = 0;
-          const formatted = json.data.reverse().map(item => {
-            sum += item.steps;
-            const d = new Date(item.date);
-            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const dateDisplay = `${months[d.getMonth()]} ${d.getDate()} (${days[d.getDay()]})`;
-
-            return {
-              id: item.date,
-              dateDisplay: dateDisplay,
-              steps: item.steps,
-              kcal: (item.steps * 0.04).toFixed(1),
-              miles: (item.steps * 0.000473).toFixed(2), // steps to miles
-              hours: (item.steps * 0.55 / 3600).toFixed(2).replace('.', ':')
-            };
-          });
-          setTimelineData(formatted);
-          setTotalSteps(sum);
+          setDbData(json.data.reverse());
         }
       } catch (err) {
         console.error(err);
@@ -53,6 +34,46 @@ export default function TimelineScreen({ setTab }) {
     };
     fetchData();
   }, []);
+
+  // Compute live data on every render!
+  const dToday = new Date();
+  const todayStr = `${dToday.getFullYear()}-${String(dToday.getMonth()+1).padStart(2,'0')}-${String(dToday.getDate()).padStart(2,'0')}`;
+  
+  let totalSteps = 0;
+  let hasToday = false;
+  
+  const timelineData = dbData.map(item => {
+    const isToday = item.date === todayStr;
+    const actualSteps = isToday && currentLiveSteps > item.steps ? currentLiveSteps : item.steps;
+    
+    totalSteps += actualSteps;
+    if (isToday) hasToday = true;
+
+    const d = new Date(item.date);
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    return {
+      id: item.date,
+      dateDisplay: isToday ? 'Today' : `${months[d.getMonth()]} ${d.getDate()} (${days[d.getDay()]})`,
+      steps: actualSteps,
+      kcal: (actualSteps * 0.04).toFixed(1),
+      miles: (actualSteps * 0.000473).toFixed(2),
+      hours: (actualSteps * 0.55 / 3600).toFixed(2).replace('.', ':')
+    };
+  });
+
+  if (currentLiveSteps > 0 && !hasToday) {
+    totalSteps += currentLiveSteps;
+    timelineData.unshift({
+      id: todayStr,
+      dateDisplay: 'Today',
+      steps: currentLiveSteps,
+      kcal: (currentLiveSteps * 0.04).toFixed(1),
+      miles: (currentLiveSteps * 0.000473).toFixed(2),
+      hours: (currentLiveSteps * 0.55 / 3600).toFixed(2).replace('.', ':')
+    });
+  }
 
   const totalMiles = (totalSteps * 0.000473).toFixed(2);
   const totalKcal = (totalSteps * 0.04).toFixed(1);
