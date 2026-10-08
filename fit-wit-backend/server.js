@@ -36,15 +36,6 @@ const DailyStep = mongoose.model('DailyStep', dailyStepSchema);
 // In-memory store for OTPs (OTPs are temporary, so memory is fine)
 const otpStore = new Map(); // email -> otp
 
-// Setup Nodemailer with your personal Gmail account
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
-
 app.post('/api/auth/send-code', async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required' });
@@ -56,16 +47,28 @@ app.post('/api/auth/send-code', async (req, res) => {
     otpStore.set(email, { otp, expires: Date.now() + 5 * 60000 });
 
     try {
-        let info = await transporter.sendMail({
-            from: '"FitWit App" <smartlearners365@gmail.com>', // MUST match the auth user email above
-            to: email,
-            subject: 'Your FitWit Verification Code',
-            text: `Your login code is: ${otp}`,
-            html: `<b>Your login code is: <span style="font-size:24px; color:#1DB954;">${otp}</span></b>`
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': process.env.BREVO_API_KEY,
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+                sender: { name: 'FitWit App', email: 'smartlearners365@gmail.com' },
+                to: [{ email: email }],
+                subject: 'Your FitWit Verification Code',
+                htmlContent: `<b>Your login code is: <span style="font-size:24px; color:#1DB954;">${otp}</span></b>`
+            })
         });
 
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(JSON.stringify(errData));
+        }
+
         console.log(`\n=========================================`);
-        console.log(`📨 GMAIL SENT TO: ${email}`);
+        console.log(`📨 BREVO API SENT TO: ${email}`);
         console.log(`🔑 OTP CODE: ${otp}`);
         console.log(`=========================================\n`);
 
