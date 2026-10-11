@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { View, StyleSheet, SafeAreaView, Text, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { View, StyleSheet, SafeAreaView, Text, TouchableOpacity, ScrollView, Dimensions, Platform, Alert, ActivityIndicator } from 'react-native';
 import { Pedometer, Accelerometer } from 'expo-sensors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { initialize, requestPermission, readRecords } from 'react-native-health-connect';
 
 import BottomTabs from './components/BottomTabs';
 import HomeScreen from './screens/HomeScreen';
@@ -25,6 +26,7 @@ export default function MainNavigator() {
   const [monthlyGoal, setMonthlyGoal] = useState(250000);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [lastSyncedSteps, setLastSyncedSteps] = useState(-1);
+  const [isAppLoading, setIsAppLoading] = useState(true);
 
   useEffect(() => {
     const checkLogin = async () => {
@@ -93,24 +95,74 @@ export default function MainNavigator() {
         // Fix: Set the initial global steps so it doesn't show 0 before the first step!
         setGlobalSteps(currentTotal);
 
-        // 1. Try to get the highly accurate historical steps from the OS
+        // Fetch cloud data on boot so it never resets to 0 if the cloud has steps!
         try {
-          const { status } = await Pedometer.requestPermissionsAsync();
-          if (status === 'granted' && await Pedometer.isAvailableAsync()) {
-            setStatusMsg('Syncing background steps...');
-            const end = new Date();
-            const start = new Date();
-            start.setHours(0, 0, 0, 0);
-
-            const pastSteps = await Pedometer.getStepCountAsync(start, end);
-            if (pastSteps && pastSteps.steps > currentTotal) {
-              currentTotal = pastSteps.steps;
-              setGlobalSteps(currentTotal);
-              AsyncStorage.setItem('@today_steps', currentTotal.toString());
+          const email = await AsyncStorage.getItem('@user_email');
+          if (email) {
+            const d = new Date();
+            const monthStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+            const todayCloudStr = `${monthStr}-${String(d.getDate()).padStart(2,'0')}`;
+            const cloudRes = await fetch(`${API_URL}/steps/monthly?email=${email}&month=${monthStr}`);
+            const cloudJson = await cloudRes.json();
+            if (cloudJson.success && cloudJson.data) {
+              const todayData = cloudJson.data.find(item => item.date === todayCloudStr);
+              if (todayData && todayData.steps > currentTotal) {
+                currentTotal = todayData.steps;
+                setGlobalSteps(currentTotal);
+                AsyncStorage.setItem('@today_steps', currentTotal.toString());
+              }
             }
           }
-        } catch (e) {
-          console.log("Could not fetch official steps", e);
+        } catch (e) { console.log("Cloud fetch error", e); }
+
+        // 1. Try to get the highly accurate historical steps from the OS
+        if (Platform.OS === 'android') {
+          try {
+            const isInitialized = await initialize();
+            if (isInitialized) {
+              const granted = await requestPermission([{ accessType: 'read', recordType: 'Steps' }]);
+              if (granted) {
+                const start = new Date();
+                start.setHours(0, 0, 0, 0);
+                const end = new Date();
+                
+                const result = await readRecords('Steps', {
+                  timeRangeFilter: {
+                    operator: 'between',
+                    startTime: start.toISOString(),
+                    endTime: end.toISOString()
+                  }
+                });
+                
+                let hcSteps = 0;
+                result.records.forEach(r => hcSteps += r.count);
+
+                if (hcSteps > currentTotal) {
+                  currentTotal = hcSteps;
+                  setGlobalSteps(currentTotal);
+                  AsyncStorage.setItem('@today_steps', currentTotal.toString());
+                }
+              }
+            }
+          } catch (e) {
+            console.log("Health Connect error", e);
+          }
+        } else {
+          try {
+            const { status } = await Pedometer.requestPermissionsAsync();
+            if (status === 'granted' && await Pedometer.isAvailableAsync()) {
+              const end = new Date();
+              const start = new Date();
+              start.setHours(0, 0, 0, 0);
+
+              const pastSteps = await Pedometer.getStepCountAsync(start, end);
+              if (pastSteps && pastSteps.steps > currentTotal) {
+                currentTotal = pastSteps.steps;
+                setGlobalSteps(currentTotal);
+                AsyncStorage.setItem('@today_steps', currentTotal.toString());
+              }
+            }
+          } catch (e) { console.log(e); }
         }
 
         // 2. Use the Accelerometer for INSTANT live counting (solves the standalone app bug!)
@@ -124,16 +176,20 @@ export default function MainNavigator() {
           const magnitude = Math.sqrt(x * x + y * y + z * z);
           const now = Date.now();
 
-          // Threshold 1.25 and 500ms to reduce false steps (less sensitive for bed)
-          if (magnitude > 1.25 && now - lastStepTime > 500) {
+          // Threshold 1.15 and 400ms to count softer, easier steps
+          if (magnitude > 1.15 && now - lastStepTime > 400) {
             lastStepTime = now;
             base += 1;
             setGlobalSteps(base);
             AsyncStorage.setItem('@today_steps', base.toString());
           }
         });
+        
+        // Hide loader when done!
+        setIsAppLoading(false);
       } catch (e) {
         setStatusMsg('Sensor Error');
+        setIsAppLoading(false);
       }
     };
 
@@ -188,6 +244,15 @@ export default function MainNavigator() {
     container: { flex: 1, backgroundColor: theme.bg },
     content: { flex: 1 }
   });
+
+  if (isAppLoading) {
+    return (
+      <SafeAreaView style={[styles.container, {justifyContent: 'center', alignItems: 'center'}]}>
+        <ActivityIndicator size="large" color={theme.accent} />
+        <Text style={{color: theme.ink, marginTop: 20, fontSize: 18, fontWeight: 'bold'}}>Warming up sensors...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
